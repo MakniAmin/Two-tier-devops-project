@@ -4,8 +4,8 @@ pipeline {
     // ── Global variables ──────────────────────────────
     environment {
         IMAGE_NAME      = "two-tier-flask-app"
-        DOCKERHUB_USER  = "your-dockerhub-username"    // change this
-        GITHUB_REPO     = "https://github.com/your-username/two-tier-flask-app.git" // change this
+        DOCKERHUB_USER  = "makniamin"    
+        GITHUB_REPO     = "https://github.com/MakniAmin/Two-tier-devops-project" 
 
         // These reference credentials stored in Jenkins
         // Add them in: Jenkins → Manage Jenkins → Credentials
@@ -90,15 +90,16 @@ pipeline {
 
     // ── Post actions (always run after stages) ─────────
     post {
-        success {
-            echo "✅ Pipeline succeeded! App is live at http://<EC2-IP>:5000"
-        }
-        failure {
-            echo "❌ Pipeline failed! Check the logs above."
-        }
-        always {
-            echo "🧹 Cleaning up unused Docker images..."
+    success {
+        echo "✅ Deployed successfully!"
+    }
+    failure {
+        echo "❌ Build failed! Check logs."
+    }
+    always {
+        node('') {                          // ✅ add this wrapper
             sh 'docker image prune -f'
         }
+    }
     }
 }
