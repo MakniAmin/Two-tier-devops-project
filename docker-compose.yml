@@ -1,47 +1,65 @@
 version: "3.8"
 
 services:
+
+  # ─── Database Layer ─────────────────────────────
   mysql:
     container_name: mysql
-    image: mysql
+    image: mysql:8.0
+    restart: always
+
+    # All values come from .env file — no hardcoding
     environment:
-      MYSQL_ROOT_PASSWORD: "root"
-      MYSQL_DATABASE: "devops"
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+
     ports:
       - "3306:3306"
 
+    # Named volume: data persists even when container is removed
     volumes:
-      - mysql_data:/var/lib/mysql
+      - mysql-data:/var/lib/mysql
 
     networks:
-      - two-tier-nt
+      - two-tier
 
-    restart: always
+    # Healthcheck: confirm MySQL is actually accepting connections
+    # depends_on uses this to know when MySQL is truly ready
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot","-proot"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 60s
 
-
-  flask-app:
+  # ─── Application Layer ──────────────────────────
+  flask:
     container_name: two-tier-app
     build:
       context: .
+      dockerfile: Dockerfile
+
+    restart: always
 
     ports:
       - "5000:5000"
 
+    # App reads DB connection info from environment
     environment:
-      - MYSQL_HOST=mysql
-      - MYSQL_USER=root
-      - MYSQL_PASSWORD=root
-      - MYSQL_DB=devops
+      MYSQL_HOST: ${MYSQL_HOST}
+      MYSQL_PORT: ${MYSQL_PORT}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_DB: ${MYSQL_DATABASE}
+      FLASK_ENV: ${FLASK_ENV}
+      SECRET_KEY: ${SECRET_KEY}
 
     networks:
-      - two-tier-nt
+      - two-tier
 
+    # Wait for mysql healthcheck to pass before starting flask
     depends_on:
       mysql:
         condition: service_healthy
@@ -51,10 +69,18 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-      start_period: 60s
+      start_period: 30s
 
+# ─── Volumes ────────────────────────────────────────
+# Named volumes are managed by Docker
+# Data survives: docker compose down
+# Data deleted only with: docker compose down -v
 volumes:
-  mysql_data:
+  mysql-data:
 
+# ─── Networks ───────────────────────────────────────
+# Custom bridge network: containers talk by service name
+# flask can reach mysql at hostname "mysql"
 networks:
-  two-tier-nt:
+  two-tier:
+    driver: bridge
