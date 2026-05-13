@@ -4,8 +4,8 @@ pipeline {
     // ── Global variables ──────────────────────────────
     environment {
         IMAGE_NAME      = "two-tier-flask-app"
-        DOCKERHUB_USER  = "makniamin"    
-        GITHUB_REPO     = "https://github.com/MakniAmin/Two-tier-devops-project" 
+        DOCKERHUB_USER  = "makniamin"    // change this to your actual DockerHub username
+        GITHUB_REPO     = "https://github.com/MakniAmin/Two-tier-devops-project.git"
 
         // These reference credentials stored in Jenkins
         // Add them in: Jenkins → Manage Jenkins → Credentials
@@ -20,25 +20,21 @@ pipeline {
 
     stages {
 
-        // ── Stage 1: Get the code ──────────────────────
-        stage('Clone Repository') {
-            steps {
-                echo "📥 Cloning repository..."
-                git branch: 'main', url: "${GITHUB_REPO}"
-            }
-        }
-
-        // ── Stage 2: Run tests ─────────────────────────
+        // ── Stage 1: Run tests ─────────────────────────
         stage('Test') {
             steps {
                 echo "🧪 Running tests..."
                 sh '''
-                    pip install -r requirements.txt --quiet
-                    # Run pytest if tests/ folder exists
+                    # Run tests inside a temporary Docker container
+                    # so we don't need pip/python installed on Jenkins server
                     if [ -d "tests" ]; then
-                        pytest tests/ -v
+                        docker run --rm \
+                            -v $(pwd):/app \
+                            -w /app \
+                            python:3.9-slim \
+                            sh -c "pip install -r requirements.txt -q && pytest tests/ -v"
                     else
-                        echo "No tests folder found, skipping..."
+                        echo "⚠️ No tests folder found, skipping..."
                     fi
                 '''
             }
@@ -90,16 +86,17 @@ pipeline {
 
     // ── Post actions (always run after stages) ─────────
     post {
-    success {
-        echo "✅ Deployed successfully!"
-    }
-    failure {
-        echo "❌ Build failed! Check logs."
-    }
-    always {
-        node('') {                          // ✅ add this wrapper
-            sh 'docker image prune -f'
+        success {
+            echo "✅ Pipeline succeeded! App is live at http://<EC2-IP>:5000"
         }
-    }
+        failure {
+            echo "❌ Pipeline failed! Check the logs above."
+        }
+        always {
+            node('') {
+                echo "🧹 Cleaning up unused Docker images..."
+                sh 'docker image prune -f'
+            }
+        }
     }
 }
